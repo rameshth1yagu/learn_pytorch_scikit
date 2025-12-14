@@ -13,6 +13,9 @@ y = life_sat[["Life satisfaction"]].values
 poly_model = make_pipeline(PolynomialFeatures(degree=2), LinearRegression())
 poly_model.fit(X, y)
 
+X_new = [[33442.8]]
+print(f"PolynomialFeatures: {poly_model.predict(X_new)}")
+
 X_range = np.linspace(X.min(), X.max(), 100).reshape(-1, 1)
 y_range = poly_model.predict(X_range)
 life_sat.plot(title="Polynomial Regression", kind="scatter", grid=True, x="GDP per capita (USD)", y="Life satisfaction")
