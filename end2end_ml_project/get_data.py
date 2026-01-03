@@ -5,6 +5,7 @@ import urllib.request
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.model_selection import train_test_split, StratifiedShuffleSplit
+from scipy.stats import binom
 
 def load_housing_data():
     tarball_path = Path("datasets/housing.tgz")
@@ -26,14 +27,15 @@ def standard_operating_procedure(housing_data: any):
     # Mathematical Statistics for numerical columns
     print(housing_data.describe())
 
-def hist(housing_data: any):
+def hist(housing_data: any, show):
     plt.rc('font', size=14)
     plt.rc('axes', labelsize=14, titlesize=14)
     plt.rc('legend', fontsize=14)
     plt.rc('xtick', labelsize=10)
     plt.rc('ytick', labelsize=10)
-    housing_data.hist(bins=50, figsize=(12,8))
-    plt.show()
+    if show:
+        housing_data.hist(bins=50, figsize=(12,8))
+        plt.show()
 
 def shuffle_and_split_data(data, test_ratio):
     shuffled_indices = np.random.permutation(len(data))
@@ -81,6 +83,10 @@ def delete_income_cat(data, test):
     for set_ in (data, test):
         set_.drop("income_cat", axis=1, inplace=True)
 
+def find_null(data):
+    print(f"Data Null values: {data.isnull().sum()}")
+    print(f"total_bedrooms - null values: {data["total_bedrooms"].isnull().sum()}")
+
 housing_full = load_housing_data()
 create_feature_stratum(housing_full)
 #train_set, test_set = shuffle_and_split_data(housing_full, 0.2)
@@ -89,5 +95,37 @@ train_set, test_set = train_test_split_with_stratification()
 
 data_volume(housing_full, train_set, test_set)
 standard_operating_procedure(train_set)
-hist(train_set)
+find_null(train_set)
+hist(train_set, False)
 delete_income_cat(train_set, test_set)
+
+#extra
+# The value you get from that calculation is approximately 0.107 (or 10.7%).
+# which means, 1 in 10 failures. Hence Stratification is the best option
+# binom - Binomial Distribution
+def sampling_bias():
+    sample_size = 1000
+    ratio_female = 0.516
+    proba_too_small = binom(sample_size, ratio_female).cdf(490 - 1)
+    proba_too_large = 1 - binom(sample_size, ratio_female).cdf(540)
+    print(f"Sampling Bias: {proba_too_small + proba_too_large}")
+
+def income_cat_proportions(data):
+    return data["income_cat"].value_counts() / len(data)
+
+def compare_random_and_stratified_sampling():
+    train_set, test_set = train_test_split(housing_full, test_size=0.2, random_state=42)
+    strat_train_set, strat_test_set = train_test_split_with_stratification()
+    compare_props = pd.DataFrame({
+        "Overall %": income_cat_proportions(housing_full),
+        "Stratified %": income_cat_proportions(strat_test_set),
+        "Random %": income_cat_proportions(test_set),
+    }).sort_index()
+    compare_props.index.name = "Income Category"
+    compare_props["Strat. Error %"] = (compare_props["Stratified %"] / compare_props["Overall %"] - 1)
+    compare_props["Rand. Error %"] = (compare_props["Random %"] / compare_props["Overall %"] - 1)
+    (compare_props * 100).round(2)
+    print(compare_props)
+
+sampling_bias()
+compare_random_and_stratified_sampling()
