@@ -1,5 +1,5 @@
 import get_data
-from sklearn.impute import SimpleImputer, KNNImputer, IterativeImputer
+from sklearn.impute import SimpleImputer#, KNNImputer, IterativeImputer
 import numpy as np
 
 train_set, _ = get_data.train_test_split_with_stratification()
@@ -19,9 +19,14 @@ def clean_data_options():
 def sklearn_imputation(data):
     imputer = SimpleImputer(strategy="median")
     data_numeric = data.select_dtypes(include=[np.number])
+    # Estimator
     imputer.fit(data_numeric)
-    print(f"Median by SimpleImputer: {imputer.statistics_}")
-    print(f"Median by pandas: {data_numeric.median().values}")
+    # Transformer
     X = imputer.transform(data_numeric)
+
+    # Estimator Inspection
+    print(f"Imputer's hyperparameter - imputer.strategy: {imputer.strategy}")
+    print(f"Imputer's learned parameters - imputer.statistics_: {imputer.statistics_}")
+    print(f"Median by pandas: {data_numeric.median().values}")
 
 sklearn_imputation(housing)
