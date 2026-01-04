@@ -1,9 +1,12 @@
+from scipy.signal import correlate
+
 import get_data
 from sklearn.impute import SimpleImputer#, KNNImputer, IterativeImputer
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder, MinMaxScaler, StandardScaler, FunctionTransformer
+from sklearn.metrics.pairwise import rbf_kernel
 
 train_set, _ = get_data.train_test_split_with_stratification()
 housing = train_set.drop("median_house_value", axis=1)
@@ -100,10 +103,44 @@ def log_transform(data):
     axes[1].set_title("Transformed Data")
     data_frame.hist(bins=50, figsize=(12, 8))
 
+# RBF - radial basis function
+def rbf_kernel_char():
+    ages = np.linspace(housing["housing_median_age"].min(),
+                       housing["housing_median_age"].max(),
+                       500).reshape(-1, 1)
+    gamma1 = 0.1
+    gamma2 = 0.03
+    rbf1 = rbf_kernel(ages, [[35]], gamma=gamma1)
+    rbf2 = rbf_kernel(ages, [[35]], gamma=gamma2)
+
+    fig, ax1 = plt.subplots()
+
+    ax1.set_xlabel("Housing median age")
+    ax1.set_ylabel("Number of districts")
+    ax1.hist(housing["housing_median_age"], bins=50)
+
+    ax2 = ax1.twinx()  # create a twin axis that shares the same x-axis
+    color = "blue"
+    ax2.plot(ages, rbf1, color=color, label="gamma = 0.10")
+    ax2.plot(ages, rbf2, color=color, label="gamma = 0.03", linestyle="--")
+    ax2.tick_params(axis='y', labelcolor=color)
+    ax2.set_ylabel("Age similarity", color=color)
+
+    plt.legend(loc="upper left")
+
+def transforming_multimodal_distribution_using_rbf_kernel(data):
+    print("\nTransforming Multimodal Distribution using RBF Kernel")
+    housing["age_35"] = rbf_kernel(data[["housing_median_age"]], [[35]], gamma=0.1)
+    #print(f"age_35: {age_35}")
+    #correlate_housing_age = housing.corr(numeric_only=True)
+    #print(f"Correlation: {correlate_housing_age["age_35"].sort_values(ascending=False)}")
+    rbf_kernel_char()
+
 
 housing_num = housing.select_dtypes(include=[np.number])
 min_max_scaling(housing_num)
 standard_scaling(housing_num)
 standard_scaling_with_mean(housing_num)
 log_transform(housing_num)
+transforming_multimodal_distribution_using_rbf_kernel(housing)
 plt.show()
