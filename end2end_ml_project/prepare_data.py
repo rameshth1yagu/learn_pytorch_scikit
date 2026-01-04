@@ -1,6 +1,8 @@
 import get_data
 from sklearn.impute import SimpleImputer#, KNNImputer, IterativeImputer
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
 train_set, _ = get_data.train_test_split_with_stratification()
 housing = train_set.drop("median_house_value", axis=1)
@@ -28,5 +30,10 @@ def sklearn_imputation(data):
     print(f"Imputer's hyperparameter - imputer.strategy: {imputer.strategy}")
     print(f"Imputer's learned parameters - imputer.statistics_: {imputer.statistics_}")
     print(f"Median by pandas: {data_numeric.median().values}")
+    x_data_frame = pd.DataFrame(X, columns=data_numeric.columns, index=data_numeric.index)
+    x_data_frame.info()
+    x_data_frame.hist(bins=50, figsize=(12, 8))
+    return x_data_frame, X
 
-sklearn_imputation(housing)
+housing_tr, X = sklearn_imputation(housing)
+plt.show()
