@@ -6,6 +6,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder, MinMaxScaler, StandardScaler, FunctionTransformer
 from sklearn.metrics.pairwise import rbf_kernel
+from sklearn.linear_model import LinearRegression
+from sklearn.compose import TransformedTargetRegressor
 
 # --- SETUP PHASE ---
 # 1. Load the data using our stratification helper to ensure a representative sample.
@@ -236,6 +238,73 @@ def transforming_multimodal_distribution_using_rbf_kernel(data):
     rbf_kernel_char()
 
 
+def label_scaling_example():
+    """
+    Demonstration: scale the target (labels), train a simple model on the scaled labels,
+    then invert the scaling to get predictions back in the original label units.
+
+    Purpose / Concept:
+    - Sometimes you want to scale the target variable (labels) before training a model,
+      for example when the target has a very different scale than the features or when
+      a model trains more stably with zero-mean targets (e.g., for some optimization setups).
+
+    Contract:
+    - Inputs (closed-over globals):
+      - `housing` (DataFrame): predictors/features including the `median_income` column.
+      - `housing_labels` (Series): original target values (median_house_value).
+    - Outputs:
+      - Returns NumPy array `predictions` containing the model predictions transformed back
+        into the original label scale (shape: (n_samples, 1) for this demo slice).
+    - Error modes / notes:
+      - This demo fits the scaler on the training labels directly (as shown). In a real
+        pipeline, fit the scaler only on the training split and reuse it on validation/test.
+      - The sklearn LinearRegression `predict` returns a 2D array when trained on a 2D target
+        (shape: [n_samples, n_targets]). We preserve that shape so `inverse_transform` works.
+    """
+
+    # Create a scaler for the target (labels). We use StandardScaler to center and scale
+    # the labels (zero mean, unit variance). This returns a 2D array when applied to a
+    # one-column DataFrame.
+    target_scaler = StandardScaler()
+
+    # Fit the scaler on the labels and transform them. We convert `housing_labels` to a
+    # DataFrame (shape: [n_samples, 1]) so inverse_transform later will accept the same shape.
+    scaled_labels = target_scaler.fit_transform(housing_labels.to_frame())
+
+    # Train a simple linear regression model to predict the scaled labels from median_income.
+    # Note: `housing[["median_income"]]` is a 2D DataFrame (n_samples, 1) as required by sklearn.
+    model = LinearRegression()
+    model.fit(housing[["median_income"]], scaled_labels)
+
+    # Take a small slice of the feature to act as "new" data we want predictions for.
+    some_new_data = housing[["median_income"]].iloc[:5]  # pretend this is new data (shape: [5, 1])
+
+    # Predict on the new data. Because we trained on a 2D target, `predict` returns a 2D array
+    # (shape: [5, 1]) which we can pass directly to inverse_transform.
+    scaled_predictions = model.predict(some_new_data)
+
+    # Convert the scaled predictions back to the original label units so the results are
+    # interpretable (e.g., actual median house values in dollars).
+    predictions = target_scaler.inverse_transform(scaled_predictions)
+
+    # Return the de-scaled predictions so callers can inspect them (keeps the function useful).
+    return predictions
+
+def transformed_target_regressor():
+    """
+    CONCEPT: TransformedTargetRegressor
+    Scikit-Learn provides a built-in wrapper to handle target scaling automatically.
+    It applies the specified transformation to the target during training and inversely
+    transforms predictions back to the original scale.
+    """
+    model = TransformedTargetRegressor(
+        regressor=LinearRegression(),
+        transformer=StandardScaler()
+    )
+    model.fit(housing[["median_income"]], housing_labels)
+    predictions = model.predict(housing[["median_income"]].iloc[:5])
+    print(f"\nTransformedTargetRegressor Predictions (first 5):\n{predictions}")
+
 # --- EXECUTION: TRANSFORMATION ---
 # Select only number columns for scaling operations
 housing_num = housing.select_dtypes(include=[np.number])
@@ -251,4 +320,10 @@ log_transform(housing_num)
 # Advanced RBF transformation to handle the specific "Age 35" bump
 transforming_multimodal_distribution_using_rbf_kernel(housing)
 
+# Demonstrate label scaling with a simple linear regression
+predictions = label_scaling_example()
+print(f"\nLabel Scaling Example Predictions (first 5):\n{predictions}")
+
+# Demonstrate TransformedTargetRegressor
+transformed_target_regressor()
 plt.show()
