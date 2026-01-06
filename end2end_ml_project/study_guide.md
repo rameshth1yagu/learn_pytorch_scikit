@@ -10,7 +10,7 @@ This guide summarizes the key concepts, rationale, and code snippets for the dat
 
 **Concept:** Automate data ingestion to ensure reproducibility across machines.
 
-```python
+```text
 from pathlib import Path
 import pandas as pd
 import tarfile
@@ -31,7 +31,7 @@ def load_housing_data():
 
 **Concept:** Set aside a "Test Set" (final exam) that the model never sees during training.
 
-```python
+```text
 from sklearn.model_selection import train_test_split
 # random_state=42 ensures the split is the same every time you run the code
 train_set, test_set = train_test_split(housing, test_size=0.2, random_state=42)
@@ -41,7 +41,7 @@ train_set, test_set = train_test_split(housing, test_size=0.2, random_state=42)
 
 **Concept:** Ensures the Test Set has the same demographic proportions (e.g., income brackets) as the real world. Critical for small or skewed datasets.
 
-```python
+```text
 # 1. Create a category bin for stratification
 housing["income_cat"] = pd.cut(
     housing["median_income"],
@@ -61,7 +61,7 @@ train_set, test_set = train_test_split(
 
 **Concept:** Get the "shape" and "quality" of the data immediately.
 
-```python
+```text
 housing.info()      # Check for nulls and data types
 housing.describe()  # Summary statistics (mean, std, min, max)
 ```
@@ -70,7 +70,7 @@ housing.describe()  # Summary statistics (mean, std, min, max)
 
 **Concept:** Plot 4 dimensions on a 2D screen (X=longitude, Y=latitude, Size=population, Color=price).
 
-```python
+```text
 housing.plot(
     kind="scatter",
     x="longitude",
@@ -92,7 +92,7 @@ housing.plot(
 - -1: Perfect negative correlation
 - 0: No linear correlation (non-linear relationships may still exist)
 
-```python
+```text
 corr_matrix = housing.corr(numeric_only=True)
 print(corr_matrix["median_house_value"].sort_values(ascending=False))
 ```
@@ -103,7 +103,7 @@ print(corr_matrix["median_house_value"].sort_values(ascending=False))
 
 **Concept:** Fill empty cells (NaN) with a robust statistic such as the median. Better than deleting rows or zero-filling.
 
-```python
+```text
 from sklearn.impute import SimpleImputer
 
 # 1. Define the imputer
@@ -123,7 +123,7 @@ X = imputer.transform(housing_num)
 - OrdinalEncoder: for genuinely ordered categories.
 - OneHotEncoder: for nominal categories (creates binary switches).
 
-```python
+```text
 from sklearn.preprocessing import OneHotEncoder
 
 cat_encoder = OneHotEncoder()
@@ -140,7 +140,7 @@ housing_cat_1hot = cat_encoder.fit_transform(housing[["ocean_proximity"]])
 - Pros: Useful for neural networks.
 - Cons: Sensitive to outliers.
 
-```python
+```text
 from sklearn.preprocessing import MinMaxScaler
 scaler = MinMaxScaler(feature_range=(-1, 1))
 housing_scaled = scaler.fit_transform(housing_num)
@@ -152,7 +152,7 @@ housing_scaled = scaler.fit_transform(housing_num)
 
 - Pros: Robust to outliers compared to min-max; standard for linear models and SVMs.
 
-```python
+```text
 from sklearn.preprocessing import StandardScaler
 scaler = StandardScaler()
 housing_scaled = scaler.fit_transform(housing_num)
@@ -162,7 +162,7 @@ housing_scaled = scaler.fit_transform(housing_num)
 
 **Concept:** Fixes heavy-tailed/skewed distributions (e.g., population or income) so they look more normal.
 
-```python
+```text
 from sklearn.preprocessing import FunctionTransformer
 import numpy as np
 
@@ -175,7 +175,7 @@ population_log = log_transformer.transform(housing[["population"]])
 
 **Concept:** The "spotlight" approach: measure similarity to a specific value (e.g., age 35) to capture modes that linear features miss.
 
-```python
+```text
 from sklearn.metrics.pairwise import rbf_kernel
 
 # Measures similarity to age 35 (gamma controls how "wide" the spotlight is)
@@ -186,7 +186,7 @@ age_simil_35 = rbf_kernel(housing[["housing_median_age"]], [[35]], gamma=0.1)
 
 **Concept:** Scale the target (label) during training and automatically un-scale predictions so humans can read them.
 
-```python
+```text
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
@@ -198,6 +198,199 @@ model = TransformedTargetRegressor(
 # Automatically scales y before training and un-scales after predicting
 model.fit(X_train, y_train)
 ```
+
+### 14. Pipelines (Chaining Transformations and Estimators)
+
+**Concept:** A Pipeline chains multiple preprocessing steps and a final estimator into a single object. This makes code cleaner, reduces the chance of data leakage, and integrates seamlessly with grid search and cross-validation.
+
+- Benefits:
+  - Keeps preprocessing and modeling steps together.
+  - Ensures transforms are applied consistently to train/validation/test sets.
+  - Works with scikit-learn search utilities (GridSearchCV, etc.).
+  - Access intermediate steps via `pipeline.named_steps`.
+
+```text
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression
+
+pipeline = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='median')),
+    ('scaler', StandardScaler()),
+    ('regressor', LinearRegression())
+])
+
+# Fit and predict like a single estimator
+pipeline.fit(housing[["median_income"]], housing_labels)
+predictions = pipeline.predict(housing[["median_income"]].iloc[:5])
+print(predictions)
+```
+
+Note: If the pipeline's last step is an estimator (like LinearRegression), `pipeline.fit_transform` is not available — use `pipeline.named_steps` or remove the final estimator from the pipeline to get transformed features.
+
+### 15. ColumnTransformer + Pipelines (Separate flows for different column types)
+
+**Concept:** Different column types (numerical vs categorical) usually require different preprocessing. Use small pipelines for each type and combine them with `ColumnTransformer` so the entire preprocessing can be treated as one transformable object.
+
+- Benefits:
+  - Apply tailored transforms to specific columns.
+  - Keep code modular and testable.
+  - Use as the preprocessing step in a larger Pipeline (preprocessing + estimator).
+
+```text
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+import numpy as np
+
+num_pipeline = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='median')),
+    ('scaler', StandardScaler())
+])
+
+cat_pipeline = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='most_frequent')),
+    ('onehot', OneHotEncoder())
+])
+
+full_pipeline = ColumnTransformer(transformers=[
+    ('num', num_pipeline, housing.select_dtypes(include=[np.number]).columns),
+    ('cat', cat_pipeline, ['ocean_proximity'])
+])
+
+housing_prepared = full_pipeline.fit_transform(housing)
+print(housing_prepared.shape)
+```
+
+Tip: To retrieve human-readable feature names after a `ColumnTransformer`, use the `get_feature_names_out()` method on the transformer or pipeline where available (scikit-learn >=1.0).
+
+### ClusterSimilarity (Custom Transformer) and Advanced Feature Creators
+
+**Concept:**
+- Sometimes builtin transformers aren't enough. You can create custom transformers by subclassing `BaseEstimator` and `TransformerMixin` so they behave like scikit-learn estimators. This keeps them compatible with Pipelines and ColumnTransformer.
+- `ClusterSimilarity` in the repo is a custom transformer that:
+  - Fits a KMeans model on geographic features (latitude/longitude).
+  - Transforms each row into similarity scores to each cluster center using an RBF kernel.
+  - Implements `get_feature_names_out` so downstream code can label the new features.
+
+Why this is useful:
+- Converts raw geo-coordinates into a richer, nonlinear representation (similarity to representative locations).
+- The resulting features can help linear models capture complex spatial effects without manual feature engineering.
+
+Example (conceptual):
+
+```text
+class ClusterSimilarity(BaseEstimator, TransformerMixin):
+    def __init__(self, n_clusters=10, gamma=1.0, random_state=None):
+        self.n_clusters = n_clusters
+        self.gamma = gamma
+        self.random_state = random_state
+
+    def fit(self, X, y=None, sample_weight=None):
+        # Learn cluster centers using KMeans
+        self.kmeans_ = KMeans(self.n_clusters, random_state=self.random_state)
+        self.kmeans_.fit(X, sample_weight=sample_weight)
+        return self
+
+    def transform(self, X):
+        # Return RBF similarity to each cluster center
+        return rbf_kernel(X, self.kmeans_.cluster_centers_, gamma=self.gamma)
+
+    def get_feature_names_out(self, names=None):
+        return [f"Cluster {i} similarity" for i in range(self.n_clusters)]
+```
+
+Notes:
+- Keep the transformer stateless except for learned attributes (e.g., `kmeans_`) so it serializes cleanly with joblib.
+- Choose `gamma` to control the softness of similarity; smaller gamma => wider similarity.
+
+### "All together": Ratio features, small pipelines, and the final ColumnTransformer
+
+**Concept:** The repo builds several small pipelines and custom feature transformers, then composes them with a `ColumnTransformer` to get a single preprocessing object. Key pieces:
+
+1. Ratio features (FunctionTransformer)
+   - `column_ratio` computes pairwise ratios (e.g., bedrooms / rooms).
+   - `FunctionTransformer` wraps the function and can provide `feature_names_out` via a helper.
+
+2. Short pipelines built with `make_pipeline` or `Pipeline`
+   - Numeric pipelines: impute (median) -> transform (log or ratio) -> scale.
+   - Categorical pipelines: impute (most_frequent) -> OneHotEncode( handle_unknown='ignore').
+   - Log pipeline: applies np.log then scales to normalize heavy-tailed features.
+
+3. Combine everything with `ColumnTransformer` and `remainder` pipeline
+   - Each named transformer receives specific columns (or selectors).
+   - `remainder=default_num_pipeline` ensures any remaining numeric column(s) are still imputed/scaled.
+   - After `fit_transform`, you get a dense (or sparse) matrix ready for modeling.
+
+Concise example (from the repo):
+
+```text
+# Simple ratio helper used by FunctionTransformer
+def column_ratio(X):
+    return X[:, [0]] / X[:, [1]]
+
+# Provide friendly feature names for the transformer
+def ratio_name(function_transformer, feature_names_in):
+    return ["ratio"]
+
+# A reusable small pipeline for ratio features
+def ratio_pipeline():
+    return make_pipeline(
+        SimpleImputer(strategy="median"),
+        FunctionTransformer(column_ratio, feature_names_out=ratio_name),
+        StandardScaler())
+
+# Categorical pipeline
+cat_pipeline = make_pipeline(
+    SimpleImputer(strategy="most_frequent"),
+    OneHotEncoder(handle_unknown="ignore"))
+
+# Log pipeline for heavy-tailed numeric features
+log_pipeline = make_pipeline(
+    SimpleImputer(strategy="median"),
+    FunctionTransformer(np.log, feature_names_out="one-to-one"),
+    StandardScaler())
+
+# Custom cluster similarity transformer instantiation
+cluster_simil = ClusterSimilarity(n_clusters=10, gamma=1., random_state=42)
+
+# Default pipeline for any remaining numeric columns
+default_num_pipeline = make_pipeline(SimpleImputer(strategy="median"),
+                                     StandardScaler())
+
+# Final ColumnTransformer assembly
+preprocessing = ColumnTransformer([
+    ("bedrooms", ratio_pipeline(), ["total_bedrooms", "total_rooms"]),
+    ("rooms_per_house", ratio_pipeline(), ["total_rooms", "households"]),
+    ("people_per_house", ratio_pipeline(), ["population", "households"]),
+    ("log", log_pipeline, ["total_bedrooms", "total_rooms", "population",
+                           "households", "median_income"]),
+    ("geo", cluster_simil, ["latitude", "longitude"]),
+    ("cat", cat_pipeline, make_column_selector(dtype_include=object)),
+],
+    remainder=default_num_pipeline)  # e.g., housing_median_age
+
+# Fit and transform
+housing_prepared = preprocessing.fit_transform(housing)
+print(housing_prepared.shape)
+# Optional: inspect first rows, round for readability
+print(housing_prepared[:5].round(2))
+# Retrieve feature names (scikit-learn >= 1.0)
+print(preprocessing.get_feature_names_out())
+```
+
+Why this pattern works well
+- Each small pipeline focuses on a single concern (imputation, scaling, encoding).
+- The `ColumnTransformer` keeps transformations column-aware and efficient.
+- The final `preprocessing` object can be embedded as the first step of a larger Pipeline together with an estimator (e.g., `Pipeline([('preproc', preprocessing), ('clf', model)])`).
+
+Tips and gotchas
+- When using FunctionTransformer to create new features, supply `feature_names_out` so `get_feature_names_out()` works end-to-end.
+- `OneHotEncoder(handle_unknown='ignore')` is recommended when your training categories might not cover all categories seen in production.
+- If `ColumnTransformer` returns a sparse matrix, some estimators may not accept it — convert to dense only if memory allows.
+- Always fit preprocessing on training data only and reuse for validation/test to avoid leakage.
 
 ---
 

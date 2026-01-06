@@ -4,10 +4,15 @@ from sklearn.impute import SimpleImputer#, KNNImputer, IterativeImputer
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import sklearn
+from sklearn import set_config
 from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder, MinMaxScaler, StandardScaler, FunctionTransformer
 from sklearn.metrics.pairwise import rbf_kernel
 from sklearn.linear_model import LinearRegression
-from sklearn.compose import TransformedTargetRegressor
+from sklearn.compose import TransformedTargetRegressor, ColumnTransformer, make_column_selector
+from sklearn.pipeline import Pipeline, make_pipeline
+from sklearn.cluster import KMeans
+from sklearn.base import BaseEstimator, TransformerMixin
 
 # --- SETUP PHASE ---
 # 1. Load the data using our stratification helper to ensure a representative sample.
@@ -305,6 +310,61 @@ def transformed_target_regressor():
     predictions = model.predict(housing[["median_income"]].iloc[:5])
     print(f"\nTransformedTargetRegressor Predictions (first 5):\n{predictions}")
 
+def pipeline_example():
+    """
+    CONCEPT: Pipelines
+    Demonstrates how to create a Scikit-Learn Pipeline that chains multiple
+    transformations and a final estimator into a single object.
+    """
+    pipeline = Pipeline(steps=[
+        ('imputer', SimpleImputer(strategy='median')),
+        ('scaler', StandardScaler()),
+        ('regressor', LinearRegression())
+    ])
+
+    # Fit the pipeline on the training data
+    pipeline.fit(housing[["median_income"]], housing_labels)
+
+    # Make predictions using the pipeline
+    predictions = pipeline.predict(housing[["median_income"]].iloc[:5])
+    print(f"\nPipeline Predictions (first 5):\n{predictions}")
+    # pipeline's last estimator is LinearRegression, so we can access its not access fit_transform
+    #housing_num_prepared = pipeline.fit_transform(housing[["median_income"]])
+    #print(f"\nPipeline Transformed Data (first 5):\n{housing_num_prepared[:5].round(2)}")
+    # pipeline's last estimator is LinearRegression, so we can access its coefficients
+    print(f"Pipeline Linear Regression Coefficients: {pipeline.named_steps['regressor'].coef_}")
+    # set_config(display='diagram')
+    # pipeline
+
+def combined_pipeline_for_numerical_and_categorical():
+    """
+    CONCEPT: ColumnTransformer with Pipelines
+    Demonstrates how to create separate pipelines for numerical and categorical
+    data, then combine them using ColumnTransformer.
+    """
+    # Numerical pipeline
+    num_pipeline = Pipeline(steps=[
+        ('imputer', SimpleImputer(strategy='median')),
+        ('scaler', StandardScaler())
+    ])
+
+    # Categorical pipeline
+    cat_pipeline = Pipeline(steps=[
+        ('imputer', SimpleImputer(strategy='most_frequent')),
+        ('onehot', OneHotEncoder())
+    ])
+
+    # Combine pipelines using ColumnTransformer
+    full_pipeline = ColumnTransformer(transformers=[
+        ('num', num_pipeline, housing.select_dtypes(include=[np.number]).columns),
+        ('cat', cat_pipeline, ['ocean_proximity'])
+    ])
+
+    # Fit and transform the entire dataset
+    housing_prepared = full_pipeline.fit_transform(housing)
+
+    print(f"\nCombined Pipeline Transformed Data Shape: {housing_prepared.shape}")
+
 # --- EXECUTION: TRANSFORMATION ---
 # Select only number columns for scaling operations
 housing_num = housing.select_dtypes(include=[np.number])
@@ -326,4 +386,67 @@ print(f"\nLabel Scaling Example Predictions (first 5):\n{predictions}")
 
 # Demonstrate TransformedTargetRegressor
 transformed_target_regressor()
+
+# Demonstrate Pipelines
+pipeline_example()
+
+# Demonstrate Combined Pipeline for Numerical and Categorical Data
+combined_pipeline_for_numerical_and_categorical()
+
+class ClusterSimilarity(BaseEstimator, TransformerMixin):
+    def __init__(self, n_clusters=10, gamma=1.0, random_state=None):
+        self.n_clusters = n_clusters
+        self.gamma = gamma
+        self.random_state = random_state
+
+    def fit(self, X, y=None, sample_weight=None):
+        self.kmeans_ = KMeans(self.n_clusters, random_state=self.random_state)
+        self.kmeans_.fit(X, sample_weight=sample_weight)
+        return self  # always return self!
+
+    def transform(self, X):
+        return rbf_kernel(X, self.kmeans_.cluster_centers_, gamma=self.gamma)
+
+    def get_feature_names_out(self, names=None):
+        return [f"Cluster {i} similarity" for i in range(self.n_clusters)]
+
+### All together
+def column_ratio(X):
+    return X[:, [0]] / X[:, [1]]
+
+def ratio_name(function_transformer, feature_names_in):
+    return ["ratio"]  # feature names out
+
+def ratio_pipeline():
+    return make_pipeline(
+        SimpleImputer(strategy="median"),
+        FunctionTransformer(column_ratio, feature_names_out=ratio_name),
+        StandardScaler())
+
+cat_pipeline = make_pipeline(
+    SimpleImputer(strategy="most_frequent"),
+    OneHotEncoder(handle_unknown="ignore"))
+
+log_pipeline = make_pipeline(
+    SimpleImputer(strategy="median"),
+    FunctionTransformer(np.log, feature_names_out="one-to-one"),
+    StandardScaler())
+cluster_simil = ClusterSimilarity(n_clusters=10, gamma=1., random_state=42)
+default_num_pipeline = make_pipeline(SimpleImputer(strategy="median"),
+                                     StandardScaler())
+preprocessing = ColumnTransformer([
+    ("bedrooms", ratio_pipeline(), ["total_bedrooms", "total_rooms"]),
+    ("rooms_per_house", ratio_pipeline(), ["total_rooms", "households"]),
+    ("people_per_house", ratio_pipeline(), ["population", "households"]),
+    ("log", log_pipeline, ["total_bedrooms", "total_rooms", "population",
+                           "households", "median_income"]),
+    ("geo", cluster_simil, ["latitude", "longitude"]),
+    ("cat", cat_pipeline, make_column_selector(dtype_include=object)),
+],
+    remainder=default_num_pipeline)  # one column remaining: housing_median_age
+
+housing_prepared = preprocessing.fit_transform(housing)
+print(f"\nFinal Prepared Housing Data Shape: {housing_prepared.shape}")
+print(f"Final Prepared Housing Data (first 5):\n{housing_prepared[:5].round(2)}")
+print(f"Feature Names:  {preprocessing.get_feature_names_out()}")
 plt.show()
