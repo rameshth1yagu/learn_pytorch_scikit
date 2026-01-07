@@ -13,6 +13,10 @@ from sklearn.compose import TransformedTargetRegressor, ColumnTransformer, make_
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.cluster import KMeans
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.metrics import root_mean_squared_error
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.model_selection import cross_val_score, GridSearchCV, RandomizedSearchCV
+from sklearn.ensemble import RandomForestRegressor
 
 # --- SETUP PHASE ---
 # 1. Load the data using our stratification helper to ensure a representative sample.
@@ -449,4 +453,100 @@ housing_prepared = preprocessing.fit_transform(housing)
 print(f"\nFinal Prepared Housing Data Shape: {housing_prepared.shape}")
 print(f"Final Prepared Housing Data (first 5):\n{housing_prepared[:5].round(2)}")
 print(f"Feature Names:  {preprocessing.get_feature_names_out()}")
-plt.show()
+
+### --- EXECUTION: TRAINING A MODEL ---
+def train_linear_regression():
+    lin_reg = make_pipeline(preprocessing, LinearRegression())
+    lin_reg.fit(housing, housing_labels)
+    housing_predictions = lin_reg.predict(housing)
+    print(f"\nLinear Regression Predictions (first 5):\n{housing_predictions[:5].round(-2)}")
+    print(f"\nLabel True Values (first 5):\n{housing_labels.iloc[:5].values}")
+    lin_mse = root_mean_squared_error(housing_labels, housing_predictions)
+    lin_rmse = np.sqrt(lin_mse)
+    print(f"\nLinear Regression RMSE: {lin_rmse:.2f}")
+    print(f"\nLinear Regression MSE: {lin_mse:.2f}")
+
+def train_decision_tree():
+    tree_reg = make_pipeline(preprocessing, DecisionTreeRegressor(random_state=42))
+    tree_reg.fit(housing, housing_labels)
+    housing_predictions = tree_reg.predict(housing)
+    print(f"\nDecision Tree Predictions (first 5):\n{housing_predictions[:5].round(-2)}")
+    print(f"\nLabel True Values (first 5):\n{housing_labels.iloc[:5].values}")
+    tree_mse = root_mean_squared_error(housing_labels, housing_predictions)
+    tree_rmse = np.sqrt(tree_mse)
+    print(f"\nDecision Tree RMSE: {tree_rmse:.2f}")
+    print(f"\nDecision Tree MSE: {tree_mse:.2f}")
+
+def cross_val_score_with_decision_tree():
+    tree_reg = make_pipeline(preprocessing, DecisionTreeRegressor(random_state=42))
+    scores = cross_val_score(tree_reg, housing, housing_labels,
+                             scoring="neg_mean_squared_error", cv=10)
+    tree_rmse_scores = np.sqrt(-scores)
+    print(f"\nDecision Tree Cross-Validation RMSE Scores: {tree_rmse_scores}")
+    print(f"Mean: {tree_rmse_scores.mean():.2f}, Stddev: {tree_rmse_scores.std():.2f}")
+    print(f"Description: {pd.Series(tree_rmse_scores).describe()}")
+
+def cross_val_score_with_linear_regression():
+    lin_reg = make_pipeline(preprocessing, LinearRegression())
+    scores = cross_val_score(lin_reg, housing, housing_labels,
+                             scoring="neg_mean_squared_error", cv=10)
+    lin_rmse_scores = np.sqrt(-scores)
+    print(f"\nLinear Regression Cross-Validation RMSE Scores: {lin_rmse_scores}")
+    print(f"Mean: {lin_rmse_scores.mean():.2f}, Stddev: {lin_rmse_scores.std():.2f}")
+    print(f"Description: {pd.Series(lin_rmse_scores).describe()}")
+
+def cross_val_score_with_random_forest():
+    forest_reg = make_pipeline(preprocessing, RandomForestRegressor(random_state=42))
+    scores = cross_val_score(forest_reg, housing, housing_labels,
+                             scoring="neg_mean_squared_error", cv=10)
+    forest_rmse_scores = np.sqrt(-scores)
+    print(f"\nRandom Forest Cross-Validation RMSE Scores: {forest_rmse_scores}")
+    print(f"Mean: {forest_rmse_scores.mean():.2f}, Stddev: {forest_rmse_scores.std():.2f}")
+    print(f"Description: {pd.Series(forest_rmse_scores).describe()}")
+
+def grid_search_cv_with_decision_tree():
+    full_pipeline = Pipeline([
+        ("preprocessing", preprocessing),
+        ("random_forest", RandomForestRegressor(random_state=42)),
+    ])
+    param_grid = [
+        {'preprocessing__geo__n_clusters': [5, 8, 10],
+         'random_forest__max_features': [4, 6, 8]},
+        {'preprocessing__geo__n_clusters': [10, 15],
+         'random_forest__max_features': [6, 8, 10]},
+    ]
+    grid_search = GridSearchCV(full_pipeline, param_grid, cv=3,
+                               scoring='neg_mean_squared_error')
+    grid_search.fit(housing, housing_labels)
+    cv_res = grid_search.cv_results_
+    for score, params in zip(cv_res["mean_test_score"], cv_res["params"]):
+        print(np.sqrt(-score), params)
+
+def random_search_cv_with_random_forest():
+    full_pipeline = Pipeline([
+        ("preprocessing", preprocessing),
+        ("random_forest", RandomForestRegressor(random_state=42)),
+    ])
+    param_distributions = {
+        'preprocessing__geo__n_clusters': [5, 8, 10, 15],
+        'random_forest__max_features': [4, 6, 8, 10],
+        'random_forest__n_estimators': [50, 100, 150],
+        'random_forest__max_depth': [None, 10, 20, 30],
+    }
+    random_search = RandomizedSearchCV(full_pipeline, param_distributions,
+                                       n_iter=10, cv=3,
+                                       scoring='neg_mean_squared_error',
+                                       random_state=42)
+    random_search.fit(housing, housing_labels)
+    cv_res = random_search.cv_results_
+    for score, params in zip(cv_res["mean_test_score"], cv_res["params"]):
+        print(np.sqrt(-score), params)
+
+train_linear_regression()
+train_decision_tree()
+cross_val_score_with_decision_tree()
+cross_val_score_with_linear_regression()
+#cross_val_score_with_random_forest()
+#grid_search_cv_with_decision_tree()
+#random_search_cv_with_random_forest()
+#plt.show()

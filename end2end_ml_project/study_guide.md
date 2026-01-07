@@ -394,6 +394,92 @@ Tips and gotchas
 
 ---
 
+## Model training & evaluation helpers
+
+Below are concise explanations and usage examples for the training and evaluation helper functions defined in `prepare_data.py` (functions starting after the preprocessing assembly).
+
+```text
+train_linear_regression()
+- Definition: Trains a linear regression pipeline that includes the preprocessing step.
+  It fits the model on the full training set, prints first predictions, and reports RMSE/MSE.
+- Use when: you want a fast, interpretable baseline model to compare against more complex models.
+- Example:
+  lin_reg = make_pipeline(preprocessing, LinearRegression())
+  lin_reg.fit(housing, housing_labels)
+  preds = lin_reg.predict(housing[:5])
+```
+
+```text
+train_decision_tree()
+- Definition: Trains a DecisionTreeRegressor inside a pipeline with preprocessing.
+  Reports predictions and computes RMSE on the training set (trees often overfit without pruning).
+- Use when: you need a nonlinear model that captures interactions but check for overfitting.
+- Example:
+  tree_reg = make_pipeline(preprocessing, DecisionTreeRegressor(random_state=42))
+  tree_reg.fit(housing, housing_labels)
+  preds = tree_reg.predict(housing[:5])
+```
+
+```text
+cross_val_score_with_decision_tree()
+- Definition: Runs K-fold cross-validation (cv=10) for the decision tree pipeline,
+  converts negative MSE scores to RMSE, and prints the distribution, mean, and stddev.
+- Use when: you want a reliable estimate of generalization performance and variance.
+- Example:
+  scores = cross_val_score(tree_reg, housing, housing_labels, scoring='neg_mean_squared_error', cv=10)
+  rmse_scores = np.sqrt(-scores)
+```
+
+```text
+cross_val_score_with_linear_regression()
+- Definition: Performs 10-fold CV for the linear regression pipeline, returning RMSE scores
+  and summary statistics to compare with other models' CV performance.
+- Use when: evaluating a linear baseline under cross-validation for robust comparison.
+- Example:
+  scores = cross_val_score(lin_reg, housing, housing_labels, scoring='neg_mean_squared_error', cv=10)
+  rmse_scores = np.sqrt(-scores)
+```
+
+```text
+cross_val_score_with_random_forest()
+- Definition: Runs cross-validation for a RandomForestRegressor pipeline and reports RMSE stats.
+- Use when: you want to evaluate a stronger ensemble model that typically yields lower error but costs more.
+- Example:
+  forest_reg = make_pipeline(preprocessing, RandomForestRegressor(random_state=42))
+  scores = cross_val_score(forest_reg, housing, housing_labels, scoring='neg_mean_squared_error', cv=10)
+```
+
+```text
+grid_search_cv_with_decision_tree()
+- Definition: Runs GridSearchCV over a Pipeline that includes preprocessing and a RandomForestRegressor.
+  It tunes preprocessing hyperparameters (e.g., number of geo clusters) and model hyperparameters
+  (e.g., max_features) using an explicit param_grid and CV folds; prints CV results.
+- Use when: you want exhaustive search over a small, well-chosen grid of hyperparameters.
+- Example param grid snippet:
+  param_grid = [
+    {'preprocessing__geo__n_clusters': [5, 8, 10], 'random_forest__max_features': [4,6,8]},
+  ]
+  grid_search = GridSearchCV(full_pipeline, param_grid, cv=3, scoring='neg_mean_squared_error')
+  grid_search.fit(housing, housing_labels)
+```
+
+```text
+random_search_cv_with_random_forest()
+- Definition: Uses RandomizedSearchCV to sample hyperparameter combinations from distributions
+  (n_iter controls samples). Faster than grid search for large parameter spaces; useful to
+  discover promising regions before a finer grid search.
+- Use when: you have many hyperparameters or large candidate sets and need a budgeted search.
+- Example param distributions snippet:
+  param_distributions = {
+    'preprocessing__geo__n_clusters': [5,8,10,15],
+    'random_forest__max_features': [4,6,8,10],
+    'random_forest__n_estimators': [50,100,150]
+  }
+  rand_search = RandomizedSearchCV(full_pipeline, param_distributions, n_iter=10, cv=3)
+```
+
+---
+
 **Notes**
 
 - In real pipelines, always fit preprocessing transforms on the training set only and apply them to validation/test sets.
