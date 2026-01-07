@@ -480,6 +480,33 @@ random_search_cv_with_random_forest()
 
 ---
 
+## Concise 3-line summaries: Data getting, processing, preparing, and models
+
+Data getting
+- `load_housing_data()`: Downloads (if needed) and reads the housing CSV into a DataFrame. Use this for reproducible ingestion and to ensure the dataset exists locally.
+- `train_test_split()` / stratified split helpers: Split the DataFrame into train/test (optionally stratified by income category) to preserve distributional properties for evaluation.
+- Quick example: call `housing = load_housing_data()` then `train_set, test_set = train_test_split(housing, test_size=0.2, random_state=42)`.
+
+Data processing / cleaning
+- `clean_data_options()`: Shows three strategies (drop rows, drop column, impute median) to handle missing values; choose imputation for production pipelines.
+- `sklearn_imputation()`: Uses `SimpleImputer` to learn medians from training data and apply them consistently; returns cleaned numeric DataFrame and raw NumPy array.
+- `text_attributes()` / `null_entries()`: Encode categorical text via `OneHotEncoder` or `OrdinalEncoder` and locate null rows for inspection; both are used during EDA and pipeline building.
+
+Preparing / feature engineering
+- Scaling & transforms (min-max, standard, log): Normalize or standardize features to help optimization and model convergence; log reduces skew for heavy-tailed columns.
+- Advanced features (RBF, ClusterSimilarity, ratios): Create nonlinear or composite features (similarity to age/geo clusters, bedrooms/rooms ratios) to reveal patterns linear models miss.
+- Pipelines & ColumnTransformer: Compose imputation, transformation, and encoding into reusable pipelines; `preprocessing.fit_transform(housing)` yields the final numeric matrix and `get_feature_names_out()` for interpretation.
+
+Models & evaluation
+- `train_linear_regression()`: Fits a linear model on preprocessed data; interpretable and fast baseline; useful to set expectations for more complex models.
+- `train_decision_tree()` / `train_random_forest()` (via cross-val): Fit tree-based models that capture nonlinear interactions; trees may overfit, forests reduce variance at higher compute cost.
+- Cross-validation & search (`cross_val_score_*`, `GridSearchCV`, `RandomizedSearchCV`): Use CV to estimate generalization RMSE, and grid/random search to tune preprocessing and model hyperparameters in a pipeline-safe way.
+
+Quick usage pattern
+- 1) Get data: `housing = load_housing_data()`; 2) Split: `train_set, test_set = ...`; 3) Build `preprocessing` (ColumnTransformer) and call `preprocessing.fit(train_set)`; 4) Train model pipeline `make_pipeline(preprocessing, estimator)`; 5) Evaluate with `cross_val_score` or held-out test set and tune with grid/random search.
+
+---
+
 **Notes**
 
 - In real pipelines, always fit preprocessing transforms on the training set only and apply them to validation/test sets.
