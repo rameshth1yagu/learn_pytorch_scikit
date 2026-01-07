@@ -480,30 +480,222 @@ random_search_cv_with_random_forest()
 
 ---
 
-## Concise 3-line summaries: Data getting, processing, preparing, and models
+## Detailed 3-line summaries (per function)
 
-Data getting
-- `load_housing_data()`: Downloads (if needed) and reads the housing CSV into a DataFrame. Use this for reproducible ingestion and to ensure the dataset exists locally.
-- `train_test_split()` / stratified split helpers: Split the DataFrame into train/test (optionally stratified by income category) to preserve distributional properties for evaluation.
-- Quick example: call `housing = load_housing_data()` then `train_set, test_set = train_test_split(housing, test_size=0.2, random_state=42)`.
+Below are 3-line explanations and a one-line example for each important function used across data acquisition, processing, preparing, and modeling in this repository.
 
-Data processing / cleaning
-- `clean_data_options()`: Shows three strategies (drop rows, drop column, impute median) to handle missing values; choose imputation for production pipelines.
-- `sklearn_imputation()`: Uses `SimpleImputer` to learn medians from training data and apply them consistently; returns cleaned numeric DataFrame and raw NumPy array.
-- `text_attributes()` / `null_entries()`: Encode categorical text via `OneHotEncoder` or `OrdinalEncoder` and locate null rows for inspection; both are used during EDA and pipeline building.
+### Data getting
 
-Preparing / feature engineering
-- Scaling & transforms (min-max, standard, log): Normalize or standardize features to help optimization and model convergence; log reduces skew for heavy-tailed columns.
-- Advanced features (RBF, ClusterSimilarity, ratios): Create nonlinear or composite features (similarity to age/geo clusters, bedrooms/rooms ratios) to reveal patterns linear models miss.
-- Pipelines & ColumnTransformer: Compose imputation, transformation, and encoding into reusable pipelines; `preprocessing.fit_transform(housing)` yields the final numeric matrix and `get_feature_names_out()` for interpretation.
+load_housing_data()
+- Definition: Ensures the housing dataset exists locally; if not, downloads the TGZ, extracts it, and returns a Pandas DataFrame.
+- Why: Ensures reproducible experiments and avoids manual download steps on new machines.
+- Example:
+```
+housing = load_housing_data()
+```
 
-Models & evaluation
-- `train_linear_regression()`: Fits a linear model on preprocessed data; interpretable and fast baseline; useful to set expectations for more complex models.
-- `train_decision_tree()` / `train_random_forest()` (via cross-val): Fit tree-based models that capture nonlinear interactions; trees may overfit, forests reduce variance at higher compute cost.
-- Cross-validation & search (`cross_val_score_*`, `GridSearchCV`, `RandomizedSearchCV`): Use CV to estimate generalization RMSE, and grid/random search to tune preprocessing and model hyperparameters in a pipeline-safe way.
+train_test_split_with_stratification()
+- Definition: Performs a stratified train/test split using a derived `income_cat` column to preserve income distribution in the test set.
+- Why: Prevents biased test sets when important features are skewed (e.g., income brackets).
+- Example:
+```
+train_set, test_set = train_test_split_with_stratification()
+```
+
+sklearn_shuffle_and_split_data()
+- Definition: Wrapper around scikit-learn's `train_test_split` with a fixed random state for reproducibility.
+- Why: Use when you want a stable random split and don't need stratification.
+- Example:
+```
+train_set, test_set = sklearn_shuffle_and_split_data(housing_full, 0.2)
+```
+
+shuffle_and_split_data()
+- Definition: Manual implementation of random shuffling and slicing to illustrate the splitting mechanics.
+- Why: Educational—shows how split logic works under the hood (not recommended for production).
+- Example:
+```
+train_set, test_set = shuffle_and_split_data(housing_full, 0.2)
+```
+
+### Data processing / cleaning
+
+clean_data_options()
+- Definition: Demonstrates three techniques to handle missing values: drop rows, drop column, or impute with median.
+- Why: Compare trade-offs (data loss vs. information retention) before choosing a production approach.
+- Example:
+```
+clean_data_options()
+```
+
+sklearn_imputation(data)
+- Definition: Fits a `SimpleImputer` on numeric columns, transforms them, and returns a cleaned DataFrame and NumPy array.
+- Why: Ensures consistent imputation parameters that can be applied to test/validation sets.
+- Example:
+```
+housing_tr, X = sklearn_imputation(housing)
+```
+
+text_attributes(data)
+- Definition: Shows encoding of text features via `OrdinalEncoder` and `OneHotEncoder`, and prints example outputs.
+- Why: Use this during EDA to decide which encoding is appropriate for each categorical column.
+- Example:
+```
+text_attributes(housing)
+```
+
+null_entries(data)
+- Definition: Locates rows with any nulls to help inspect problematic samples and decide imputation strategy.
+- Why: Quick auditing step before automated imputation.
+- Example:
+```
+null_entries(housing)
+```
+
+find_null(data)
+- Definition: Prints counts of nulls per column (helper in `get_data.py` used earlier in the flow).
+- Why: Helps prioritize which columns must be imputed or cleaned.
+- Example:
+```
+find_null(train_set)
+```
+
+delete_income_cat(data, test)
+- Definition: Removes the temporary `income_cat` column used only for stratified splitting.
+- Why: Prevents leakage—models should not use artificial helper columns.
+- Example:
+```
+delete_income_cat(train_set, test_set)
+```
+
+### Preparing / feature engineering
+
+min_max_scaling(data)
+- Definition: Demonstrates MinMax scaling (feature range configurable, here -1 to 1) and plots histograms.
+- Why: Useful for neural nets or when a fixed range is required.
+- Example:
+```
+min_max_scaling(housing_num)
+```
+
+standard_scaling(data)
+- Definition: Demonstrates StandardScaler to center features to mean=0 and std=1; useful for many ML models.
+- Why: Helps models that assume centered data (e.g., linear models, SVMs).
+- Example:
+```
+standard_scaling(housing_num)
+```
+
+standard_scaling_with_mean(data)
+- Definition: Variation of standard scaling with with_mean=False (required for sparse matrices) and demonstration.
+- Why: Use when preserving sparsity is important (e.g., one-hot encoded large categories).
+- Example:
+```
+standard_scaling_with_mean(housing_num)
+```
+
+log_transform(data)
+- Definition: Applies log1p to heavy-tailed columns (like population) to reduce skew and visualize effect.
+- Why: Makes distributions more normal-like improving some models and stability.
+- Example:
+```
+log_transform(housing_num)
+```
+
+rbf_kernel_char()
+- Definition: Plots RBF similarity curves to demonstrate how gamma controls the spotlight effect around a landmark value.
+- Why: Conceptual tool to understand kernel-based feature generation for multimodal distributions.
+- Example:
+```
+rbf_kernel_char()
+```
+
+transforming_multimodal_distribution_using_rbf_kernel(data)
+- Definition: Adds a new 'age_35' feature measuring closeness to 35 using RBF similarity, then visualizes.
+- Why: Helps linear models capture localized bumps (modes) in a feature's relationship with the target.
+- Example:
+```
+transforming_multimodal_distribution_using_rbf_kernel(housing)
+```
+
+label_scaling_example()
+- Definition: Demonstrates scaling the target (labels) with `StandardScaler`, training on the scaled labels, and inverting predictions.
+- Why: Shows when/why you might scale the target—remember to fit scaler on training labels only.
+- Example:
+```
+preds = label_scaling_example()
+```
+
+ClusterSimilarity (custom transformer)
+- Definition: Custom transformer that fits KMeans on latitude/longitude and returns RBF similarities to cluster centers.
+- Why: Converts coordinates into informative, nonlinear features that linear models can use effectively.
+- Example:
+```
+cluster = ClusterSimilarity(n_clusters=10, gamma=1.0)
+cluster.fit(housing[["latitude","longitude"]])
+cluster.transform(housing[["latitude","longitude"])  # returns similarity matrix
+```
+
+### Models & evaluation
+
+train_linear_regression()
+- Definition: Builds a Pipeline(preprocessing, LinearRegression), fits on training data, prints sample predictions and RMSE.
+- Why: Fast, interpretable baseline to measure improvements from complex models.
+- Example:
+```
+train_linear_regression()
+```
+
+train_decision_tree()
+- Definition: Fits a DecisionTreeRegressor inside a pipeline, prints predictions and computes training RMSE (often optimistic).
+- Why: Captures nonlinear interactions; watch for overfitting and compare with CV.
+- Example:
+```
+train_decision_tree()
+```
+
+cross_val_score_with_decision_tree()
+- Definition: Runs 10-fold CV for the decision tree pipeline, converts neg-MSE to RMSE, and prints distribution/summary.
+- Why: Gives a robust estimate of generalization error and variance for trees.
+- Example:
+```
+cross_val_score_with_decision_tree()
+```
+
+cross_val_score_with_linear_regression()
+- Definition: Runs 10-fold CV for the linear pipeline and reports RMSE scores and summary statistics.
+- Why: Useful to compare baseline linear performance to more complex models under CV.
+- Example:
+```
+cross_val_score_with_linear_regression()
+```
+
+cross_val_score_with_random_forest()
+- Definition: Executes 10-fold CV for the RandomForest pipeline and prints RMSE distribution and stats.
+- Why: Random forests reduce variance compared to a single tree at higher compute cost.
+- Example:
+```
+cross_val_score_with_random_forest()
+```
+
+grid_search_cv_with_decision_tree()
+- Definition: GridSearchCV over a Pipeline including preprocessing and RandomForestRegressor, tuning both preprocessing and model params.
+- Why: Exhaustive search for small grids; useful when you expect parameter interactions across preprocessing and model.
+- Example:
+```
+grid_search_cv_with_decision_tree()
+```
+
+random_search_cv_with_random_forest()
+- Definition: RandomizedSearchCV sampling hyperparameter combinations across distributions; prints CV results for sampled configs.
+- Why: Budget-friendly search over larger hyperparameter spaces; good first pass before finer grid search.
+- Example:
+```
+random_search_cv_with_random_forest()
+```
 
 Quick usage pattern
-- 1) Get data: `housing = load_housing_data()`; 2) Split: `train_set, test_set = ...`; 3) Build `preprocessing` (ColumnTransformer) and call `preprocessing.fit(train_set)`; 4) Train model pipeline `make_pipeline(preprocessing, estimator)`; 5) Evaluate with `cross_val_score` or held-out test set and tune with grid/random search.
+- 1) Get data: `housing = load_housing_data()`; 2) Split: `train_set, test_set = train_test_split_with_stratification()`; 3) Build `preprocessing` and call `preprocessing.fit(train_set)`; 4) Train a pipeline `make_pipeline(preprocessing, estimator)`; 5) Evaluate with CV and refine with grid/random search.
 
 ---
 
